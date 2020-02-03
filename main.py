@@ -91,96 +91,100 @@ class Server:
             return {"Score": {self.name: self.question_count}}
         return {"Score": {self.name: "null"}}
 
+
 class Client:
     def __init__(self):
         self.problem = None
+        self.tree = {}
+        self.bad_ancestors = {}
+        self.good_ancestors = {}
 
     def set_problem(self, problem: dict):
         self.problem = problem['Problem']
+        self.bad_ancestors = {}
+        self.good_ancestors = {}
 
-    def remove_good_ancestors(self, good_commit: str):
-        potential_bad_list = []
+    def generate_json_tree(self):
+        for commit in self.problem['dag']:
+            self.tree[commit[0]] = commit[1]
+
+    def extract_parents(self, bad_commit):
+        return self.tree[bad_commit]
+
+    def extract_bad_ancestors(self, bad_commits):
         parents = []
-        for index in range(0, len(self.problem['dag'])):
-            if good_commit == self.problem['dag'][index][0]:
-                for i in self.problem['dag'][index][1]:
-                    parents.append(i)
-            else:
-                potential_bad_list.append(self.problem['dag'][index])
-        self.problem['dag'] = potential_bad_list
-        return parents
-        #
-        # for i in range(0, 100000):
-        #     for commit in self.problem['dag']:
-        #         if parents == []:
-        #             if good == commit[0]:
-        #                 to_remove.append(commit)
-        #                 for par in commit[1]:
-        #                     parents.append(par)
-        #         else:
-        #             for par in parents:
-        #                 if par == commit[0]:
-        #
-        #
-        # print(to_remove)
+        for commit in bad_commits:
+            data = self.extract_parents(commit)
+            self.bad_ancestors[commit] = data
+            for parent in set(data):
+                parents.append(parent)
+        return set(parents)
 
-        # print(self.problem['dag'])
-        # for i in range(0, 10000000):
-        #     for commit in self.problem['dag']:
-        #         if parents is []:
-        #             if self.problem['good'] == commit[0]:
-        #                 good = commit[0]
-        #                 for par in commit[1]:
-        #                     parents.append(par)
-        #         else:
-        #             try:
-        #                 for parent in parents:
-        #                     if parent == commit[0]:
-        #
-        #         else:
-        #             try:
-        #                 if parent == commit[0]:
-        #                     good = commit[0]
-        #                     for par in commit[1]:
-        #                         print(par)
-        #                     parent = commit[1][0]
-        #                     # print(parent)
-        #             except IndexError:
-        #                 print(good)
-        #                 exit(0)
-        # for i in self.problem['dag']:
-        #     print(i)
+    def extract_good_ancestors(self, good_commits):
+        parents = []
+        for commit in good_commits:
+            data = self.extract_parents(commit)
+            self.good_ancestors[commit] = data
+            for parent in set(data):
+                parents.append(parent)
+        return set(parents)
 
-# 899ae83acbaca830fadc633e75f4f97da582648f
-  # 3c1e0f0a8cf693c0e510ff8749b201d14f7ab9b8
-    # 10f3d93df728274685b3ce16468862199b6876ff
-      #  1c77e1a492f701f921fba9aea31560eec7d83c88
 
 if __name__ == '__main__':
+    import time
     s = Server()
     c = Client()
     content = None
     for file in os.listdir("{}/tests/".format(os.getcwd())):
         with open("{}/tests/{}".format(os.getcwd(), file), "r") as json_file:
-            content = json.load(json_file)
-            s.set_problem_instance(data=content)
+            print("OPERATING ON FILE {}".format(file))
+            keep_bad_ancestors = {}
+            problem_content = json.load(json_file)
+            s.set_problem_instance(data=problem_content)
             c.set_problem(s.get_problem_instance())
-            par = c.remove_good_ancestors(c.problem['good'])
-            print('new parents to remove')
-            print(par)
-            for i in range(0, 1000):
-                new_parents = []
-                for p in par:
-                    new_parents = c.remove_good_ancestors(p)
-                    print('new parents to remove')
-                    print(new_parents)
-                par = new_parents
-            #     print(par)
-            # print(len(c.problem['dag']))
+            c.generate_json_tree()
+            print("WE WANT TO FIND THE BUG {}:".format(s.bug))
+            print("STARTING SIZE: {}".format(len(c.tree.keys())))
+            bad = [c.problem['bad']]
+            # print("bad: {}".format(c.problem['bad']))
+            while len(bad) != 0:
+                bad = c.extract_bad_ancestors(bad)
 
-            # print(s.response_to_question(question={"Question": problem['Problem']['good']}))
-            # print(s.response_to_question(question={"Question": problem['Problem']['bad']}))
-            # print(s.handle_solution(solution={"Solution": problem['Problem']['bad']}))
+            good = [c.problem['good']]
+            # print("good: {}".format(c.problem['good']))
+            while len(good) != 0:
+                good = c.extract_good_ancestors(good)
+
+            print("LENGTH OF BAD ANCESTORS WITHOUT REMOVING GOOD KEYS: {}".format(len(c.bad_ancestors.keys())))
+            print("LENGTH OF GOOD ANCESTORS: {}".format(len(c.good_ancestors.keys())))
+            for key in c.good_ancestors.keys():
+                del c.bad_ancestors[key]
+            print("LENGTH OF BAD ANCESTORS AFTER REMOVING GOOD ONES: {}".format(len(c.bad_ancestors.keys())))
+            for key in c.bad_ancestors.keys():
+                if s.handle_solution({'Solution': key})['Score'][c.problem['name']] != "null":
+                    print("FOUND: {} {}".format(key, s.bug))
             print(" ")
-        break
+            # break
+                # print(len(bad))
+                # print(len(good))
+            # print(c.bad_ancestors)
 
+            # for b in bad:
+            #     bad = c.extract_parents(b)
+            # print(bad)
+            # new_bad = []
+            # for b in bad:
+            #     data = c.extract_parents(b)
+            #     for i in data:
+            #         new_bad.append(i)
+            # print(new_bad)
+
+            # print(c.extract_parents('5640d641d6066a85439d7027b960ebc2cebd37de'))
+            # for i in c.tree.keys():
+            #     for a in c.tree[i]:
+            #         if a == '5640d641d6066a85439d7027b960ebc2cebd37de':
+            #             print(i)
+            # print(" ")
+            # for i in c.problem['dag']:
+            #     print(i)
+            # break
