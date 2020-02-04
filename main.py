@@ -112,37 +112,12 @@ class Client:
         for commit in self.problem['dag']:
             self.tree[commit[0]] = commit[1]
 
-    def select_mid_point_ask(self):
-        half_number = round(len(c.bad_ancestors.keys()) / 2)
-        self.problem['bad'] = list(c.bad_ancestors.keys())[half_number]
-        answer = s.response_to_question({'Question': c.problem['bad']})['Answer']
-        return answer
+    def select_mid_point(self, dag):
+        half_number = round(len(dag.keys()) / 2)
+        picked_key = list(dag.keys())[half_number]
+        return picked_key
 
-    def bfs(self, source_node: str, dag: dict):
-        visited = {source_node: True}
-        queue = [source_node]
-        parent_count = [] #
-        while len(queue) != 0:
-
-            vertex = queue[len(queue) - 1]
-            print(vertex)
-            queue.pop(len(queue) - 1)
-            parent = dag[vertex]
-            for w in parent:
-                if w not in visited:
-                    queue.append(w)
-                    visited[w] = True
-
-
-                    for i in parent:#
-                        parent_count.append(i)#
-            print(len(set(parent_count)))
-
-
-        # print(len(set))
-        return len(visited.keys())
-
-    def keep_ancestors(self, source_node, dag: dict, removed_keys: dict):
+    def bfs(self, source_node: str, dag: dict, removed_keys: dict ):
         visited = {source_node: True}
         queue = [source_node]
         while len(queue) != 0:
@@ -154,29 +129,77 @@ class Client:
                     if w not in visited:
                         queue.append(w)
                         visited[w] = True
+        return len(visited.keys())
+
+    def keep_ancestors(self, source_node, dag: dict, removed_keys: dict):
+        visited = {source_node: True}
+        queue = [source_node]
+        while len(queue) != 0:
+            vertex = queue[len(queue) - 1]
+            queue.pop(len(queue) - 1)
+            if vertex not in removed_keys.keys():  # dont try to index a key that has been removed
+                parent = dag[vertex]
+                for w in parent:
+                    if w not in visited and w not in removed_keys.keys():
+                        queue.append(w)
+                        visited[w] = True
         new_dag = dag.copy()
         for key in dag.keys():  # go through the keys containing decendents of the bad key
             if key not in visited.keys():  # if the key is not an ancestor of our bad commit
                 del new_dag[key]  # remove that key from the dag, leaving only decendents of the bad commit
         return new_dag
 
-    def remove_ancestors(self, source_node: str, dag: dict):
+    def remove_ancestors(self, source_node: str, dag: dict, removed_keys: dict):
         starting_dag = dag
         visited = {source_node: True}
         queue = [source_node]
         while len(queue) != 0:
             vertex = queue[len(queue) - 1]
             queue.pop(len(queue) - 1)
-            parent = starting_dag[vertex]
-            for w in parent:
-                if w not in visited:
-                    queue.append(w)
-                    visited[w] = True
+            if vertex not in removed_keys.keys():
+                parent = starting_dag[vertex]
+                for w in parent:
+                    if w not in visited and w not in removed_keys.keys():
+                        queue.append(w)
+                        visited[w] = True
 
         for key in visited.keys():
             del starting_dag[key]
 
+        for i in starting_dag.keys():
+            for ref in starting_dag[i]:
+                if ref in visited.keys():
+                    starting_dag[i].remove(ref)
+
         return starting_dag, visited
+
+    def pick_new_key(self, dag, removed_keys):
+        chosen_key = None
+        if len(dag.keys()) > 9000:
+            print("too large to find best key")
+            key = c.select_mid_point(dag=dag)
+            print("best key is {}".format(key))
+            return key
+        else:
+            print("can find best key")
+            best_number = round(len(dag.keys()) / 2)
+            key_count = {}
+            for key in dag:
+                ancestor_count = c.bfs(key, dag, removed_keys)
+                if ancestor_count == best_number:
+                    print("found best key during count")
+                    return key
+                else:
+                    key_count[key] = ancestor_count
+            for key in key_count.keys():
+                key_count[key] = min(key_count[key], len(dag.keys()) - key_count[key])
+            highest = 0
+            for key in key_count.keys():
+                if key_count[key] > highest:
+                    highest = key_count[key]
+                    chosen_key = key
+        print("best key is {}".format(chosen_key))
+        return chosen_key
 
 if __name__ == '__main__':
     s = Server()
@@ -184,7 +207,7 @@ if __name__ == '__main__':
     content = None
     for file in os.listdir("{}/tests/".format(os.getcwd())):
         with open("{}/tests/{}".format(os.getcwd(), file), "r") as json_file:
-            # if "test_tensorflow12" in file:
+
             print("OPERATING ON FILE {}".format(file))
             problem_content = json.load(json_file)
 
@@ -199,32 +222,29 @@ if __name__ == '__main__':
             print("DEFINED BAD COMMIT {}:".format(c.problem['bad']))
             print("STARTING SIZE: {}".format(len(c.tree.keys())))
 
-            old_dag = c.tree.copy()
-            new_dag, removed_keys = c.remove_ancestors(c.problem['good'], old_dag)
-            print("NEW SIZE: {}".format(len(new_dag.keys())))
-            # print(new_dag)
-            new_dag = c.keep_ancestors(c.problem['bad'], new_dag, removed_keys)
-            print("NEW SIZE: {}".format(len(new_dag.keys())))
-            for key in new_dag:
-                if key == s.bad:
-                    print("FOUND")
-                if key == c.problem['bad']:
-                    print("BAD KEY STILL PRESENT")
+            ret_dag, removed_keys = c.remove_ancestors(c.problem['good'], c.tree, {})
+            ret_dag = c.keep_ancestors(c.problem['bad'], ret_dag, removed_keys)
+            print("NEW SIZE: {}".format(len(ret_dag.keys())))
 
-            # min_point = round(len(new_dag.keys()) / 2)
-            # # print(new_dag['9ca4dd6024f4f60aa5ae77f4a6178b5a69f3464a'])
-            # count = 0
-            # print(c.bfs('787b49ae78ef36be38134c937756bc2738dccf35', new_dag))
-            # for key in new_dag:
-            #     count = count + 1
-            #     print(key)
-            #     # if key == s.bug:
-            #     #     print("found")
-            #     ancestor_count = c.bfs(key, new_dag)
-            #     print(ancestor_count)
-            #     print(" ")
-            #     if ancestor_count == min_point:
-            #         print("Found best intersection point {} with {} ancestors, searched through {} keys".format(key, ancestor_count, count))
-            #         break
+            while len(ret_dag.keys()) > 2:
+                chosen_key = c.pick_new_key(dag=ret_dag, removed_keys=removed_keys)
+                if s.response_to_question({'Question': chosen_key})['Answer'] == "bad":
+                    print("bad")
+                    ret_dag = c.keep_ancestors(chosen_key, ret_dag, removed_keys)
+                    print(len(ret_dag.keys()))
+                    for k in ret_dag:
+                        if k == s.bug:
+                            print("found")
+                else:
+                    print("good")
+                    ret_dag, removed_keys = c.remove_ancestors(chosen_key, ret_dag, removed_keys)
+                    print(len(ret_dag.keys()))
+                    for k in ret_dag:
+                        if k == s.bug:
+                            print("found")
+            for key in ret_dag:
+                if key == s.bug:
+                    print("FOUND BUG {}".format(s.bug))
+            # print(ret_dag)
             print(" ")
-                # break
+            # break
