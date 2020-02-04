@@ -98,86 +98,133 @@ class Client:
         self.tree = {}
         self.bad_ancestors = {}
         self.good_ancestors = {}
+        self.test = {}
+        self.ancestors = {}
 
     def set_problem(self, problem: dict):
         self.problem = problem['Problem']
         self.bad_ancestors = {}
         self.good_ancestors = {}
+        self.test = {}
 
     def generate_json_tree(self):
         self.tree = {}
         for commit in self.problem['dag']:
             self.tree[commit[0]] = commit[1]
 
-    def extract_parents(self, bad_commit):
-        return self.tree[bad_commit]
+    def select_mid_point_ask(self):
+        half_number = round(len(c.bad_ancestors.keys()) / 2)
+        self.problem['bad'] = list(c.bad_ancestors.keys())[half_number]
+        answer = s.response_to_question({'Question': c.problem['bad']})['Answer']
+        return answer
 
-    def extract_bad_ancestors(self, bad_commits, good_commit, good_commit_parents):
-        # if the parent of the good commit, is also the parent of the next commit then skip
-        parents = []
-        for commit in bad_commits:
-            if commit not in c.good_ancestors.keys() and commit not in c.bad_ancestors.keys():
-                data = self.extract_parents(commit)
-                self.bad_ancestors[commit] = data
-                for parent in data:
-                    parents.append(parent)
-        return set(parents)
+    def bfs(self, source_node: str, dag: dict):
+        visited = {source_node: True}
+        queue = [source_node]
+        parent_count = [] #
+        while len(queue) != 0:
 
-    def extract_good_ancestors(self, good_commits):
-        parents = []
-        for commit in good_commits:
-            if commit not in self.good_ancestors.keys():
-                data = self.extract_parents(commit)
-                self.good_ancestors[commit] = data
-                for parent in data:
-                    parents.append(parent)
-        return set(parents)
+            vertex = queue[len(queue) - 1]
+            print(vertex)
+            queue.pop(len(queue) - 1)
+            parent = dag[vertex]
+            for w in parent:
+                if w not in visited:
+                    queue.append(w)
+                    visited[w] = True
 
+
+                    for i in parent:#
+                        parent_count.append(i)#
+            print(len(set(parent_count)))
+
+
+        # print(len(set))
+        return len(visited.keys())
+
+    def keep_ancestors(self, source_node, dag: dict, removed_keys: dict):
+        visited = {source_node: True}
+        queue = [source_node]
+        while len(queue) != 0:
+            vertex = queue[len(queue) - 1]
+            queue.pop(len(queue) - 1)
+            if vertex not in removed_keys.keys():  # dont try to index a key that has been removed
+                parent = dag[vertex]
+                for w in parent:
+                    if w not in visited:
+                        queue.append(w)
+                        visited[w] = True
+        new_dag = dag.copy()
+        for key in dag.keys():  # go through the keys containing decendents of the bad key
+            if key not in visited.keys():  # if the key is not an ancestor of our bad commit
+                del new_dag[key]  # remove that key from the dag, leaving only decendents of the bad commit
+        return new_dag
+
+    def remove_ancestors(self, source_node: str, dag: dict):
+        starting_dag = dag
+        visited = {source_node: True}
+        queue = [source_node]
+        while len(queue) != 0:
+            vertex = queue[len(queue) - 1]
+            queue.pop(len(queue) - 1)
+            parent = starting_dag[vertex]
+            for w in parent:
+                if w not in visited:
+                    queue.append(w)
+                    visited[w] = True
+
+        for key in visited.keys():
+            del starting_dag[key]
+
+        return starting_dag, visited
 
 if __name__ == '__main__':
     s = Server()
     c = Client()
     content = None
-    import time
     for file in os.listdir("{}/tests/".format(os.getcwd())):
         with open("{}/tests/{}".format(os.getcwd(), file), "r") as json_file:
-            # if "bootstrap0.json" in file:
+            # if "test_tensorflow12" in file:
             print("OPERATING ON FILE {}".format(file))
-            keep_bad_ancestors = {}
             problem_content = json.load(json_file)
+
             s.set_problem_instance(data=problem_content)
+
             c.set_problem(s.get_problem_instance())
+
             c.generate_json_tree()
+
             print("WE WANT TO FIND THE BUG {}:".format(s.bug))
             print("DEFINED GOOD COMMIT {}:".format(c.problem['good']))
             print("DEFINED BAD COMMIT {}:".format(c.problem['bad']))
-            # print(c.tree[c.problem['good']])
             print("STARTING SIZE: {}".format(len(c.tree.keys())))
 
+            old_dag = c.tree.copy()
+            new_dag, removed_keys = c.remove_ancestors(c.problem['good'], old_dag)
+            print("NEW SIZE: {}".format(len(new_dag.keys())))
+            # print(new_dag)
+            new_dag = c.keep_ancestors(c.problem['bad'], new_dag, removed_keys)
+            print("NEW SIZE: {}".format(len(new_dag.keys())))
+            for key in new_dag:
+                if key == s.bad:
+                    print("FOUND")
+                if key == c.problem['bad']:
+                    print("BAD KEY STILL PRESENT")
 
-            good = [c.problem['good']]
-            while len(good) != 0:
-                good = c.extract_good_ancestors(good)
-            # for i in c.good_ancestors.keys():
-            #     print("{} {}".format(i, c.good_ancestors[i]))
-            # print("done")
-
-            bad = [c.problem['bad']]
-            while len(bad) != 0:
-                bad = c.extract_bad_ancestors(bad, c.problem['good'], c.extract_parents(c.problem['good']))
-
-            #     # print(len(bad))
-            #     # print(len(set(bad)))
-            #     # print(" ")
-            #     # time.sleep(1)
-            #     # print(len(bad))
-            #     # print(len(bad))
-            #
-            #
-            print("LENGTH OF BAD ANCESTORS: {}".format(len(c.bad_ancestors.keys())))
-            # print("LENGTH OF GOOD ANCESTORS: {}".format(len(c.good_ancestors.keys())))
-            for key in c.bad_ancestors.keys():
-                if s.handle_solution({'Solution': key})['Score'][c.problem['name']] != "null":
-                    print("FOUND: {} {}".format(key, s.bug))
+            # min_point = round(len(new_dag.keys()) / 2)
+            # # print(new_dag['9ca4dd6024f4f60aa5ae77f4a6178b5a69f3464a'])
+            # count = 0
+            # print(c.bfs('787b49ae78ef36be38134c937756bc2738dccf35', new_dag))
+            # for key in new_dag:
+            #     count = count + 1
+            #     print(key)
+            #     # if key == s.bug:
+            #     #     print("found")
+            #     ancestor_count = c.bfs(key, new_dag)
+            #     print(ancestor_count)
+            #     print(" ")
+            #     if ancestor_count == min_point:
+            #         print("Found best intersection point {} with {} ancestors, searched through {} keys".format(key, ancestor_count, count))
+            #         break
             print(" ")
-            # break
+                # break
