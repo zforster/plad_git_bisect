@@ -112,11 +112,6 @@ class Client:
         for commit in self.problem['dag']:
             self.tree[commit[0]] = commit[1]
 
-    def select_mid_point(self, dag):
-        half_number = round(len(dag.keys()) / 2)
-        picked_key = list(dag.keys())[half_number]
-        return picked_key
-
     def bfs(self, source_node: str, dag: dict, removed_keys: dict ):
         visited = {source_node: True}
         queue = [source_node]
@@ -144,9 +139,11 @@ class Client:
                         queue.append(w)
                         visited[w] = True
         new_dag = dag.copy()
+        rem = 0
         for key in dag.keys():  # go through the keys containing decendents of the bad key
             if key not in visited.keys():  # if the key is not an ancestor of our bad commit
                 del new_dag[key]  # remove that key from the dag, leaving only decendents of the bad commit
+                rem = rem + 1
         return new_dag
 
     def remove_ancestors(self, source_node: str, dag: dict, removed_keys: dict):
@@ -157,6 +154,7 @@ class Client:
             vertex = queue[len(queue) - 1]
             queue.pop(len(queue) - 1)
             if vertex not in removed_keys.keys():
+                visited[vertex] = True
                 parent = starting_dag[vertex]
                 for w in parent:
                     if w not in visited and w not in removed_keys.keys():
@@ -166,28 +164,29 @@ class Client:
         for key in visited.keys():
             del starting_dag[key]
 
-        for i in starting_dag.keys():
-            for ref in starting_dag[i]:
-                if ref in visited.keys():
-                    starting_dag[i].remove(ref)
+        for key in starting_dag.keys():
+            for item in starting_dag[key]:
+                if item in visited.keys():
+                    starting_dag[key] = [x for x in starting_dag[key] if x != item]
 
         return starting_dag, visited
 
-    def pick_new_key(self, dag, removed_keys):
+    def pick_new_key(self, dag, removed_keys, picked):
         chosen_key = None
         if len(dag.keys()) > 9000:
-            print("too large to find best key")
-            key = c.select_mid_point(dag=dag)
-            print("best key is {}".format(key))
+            half_number = round(len(dag.keys()) / 2)
+            key = list(dag.keys())[half_number]
+            while key in picked:
+                key = list(dag.keys())[half_number - 1]  # what if half number is
             return key
         else:
-            print("can find best key")
+            # print("can find best key")
             best_number = round(len(dag.keys()) / 2)
             key_count = {}
             for key in dag:
                 ancestor_count = c.bfs(key, dag, removed_keys)
                 if ancestor_count == best_number:
-                    print("found best key during count")
+                    # print("found best key during count")
                     return key
                 else:
                     key_count[key] = ancestor_count
@@ -198,7 +197,7 @@ class Client:
                 if key_count[key] > highest:
                     highest = key_count[key]
                     chosen_key = key
-        print("best key is {}".format(chosen_key))
+        # print("best key is {}".format(chosen_key))
         return chosen_key
 
 if __name__ == '__main__':
@@ -208,6 +207,7 @@ if __name__ == '__main__':
     for file in os.listdir("{}/tests/".format(os.getcwd())):
         with open("{}/tests/{}".format(os.getcwd(), file), "r") as json_file:
 
+            already_picked = []
             print("OPERATING ON FILE {}".format(file))
             problem_content = json.load(json_file)
 
@@ -217,34 +217,43 @@ if __name__ == '__main__':
 
             c.generate_json_tree()
 
-            print("WE WANT TO FIND THE BUG {}:".format(s.bug))
-            print("DEFINED GOOD COMMIT {}:".format(c.problem['good']))
-            print("DEFINED BAD COMMIT {}:".format(c.problem['bad']))
-            print("STARTING SIZE: {}".format(len(c.tree.keys())))
+            # print("WE WANT TO FIND THE BUG {}:".format(s.bug))
+            # print("DEFINED GOOD COMMIT {}:".format(c.problem['good']))
+            # print("DEFINED BAD COMMIT {}:".format(c.problem['bad']))
+            # print("STARTING SIZE: {}".format(len(c.tree.keys())))
 
-            ret_dag, removed_keys = c.remove_ancestors(c.problem['good'], c.tree, {})
-            ret_dag = c.keep_ancestors(c.problem['bad'], ret_dag, removed_keys)
+            ret_dag, removed = c.remove_ancestors(c.problem['good'], c.tree, {})
+            ret_dag = c.keep_ancestors(c.problem['bad'], ret_dag, removed)
             print("NEW SIZE: {}".format(len(ret_dag.keys())))
-
-            while len(ret_dag.keys()) > 2:
-                chosen_key = c.pick_new_key(dag=ret_dag, removed_keys=removed_keys)
+            q_count = 0
+            while len(ret_dag.keys()) > 1:
+                chosen_key = c.pick_new_key(dag=ret_dag, removed_keys=removed, picked=already_picked)
+                already_picked.append(chosen_key)
+                # print(chosen_key)
+                q_count = q_count + 1
+                # print("asked question {}".format(q_count))
                 if s.response_to_question({'Question': chosen_key})['Answer'] == "bad":
-                    print("bad")
-                    ret_dag = c.keep_ancestors(chosen_key, ret_dag, removed_keys)
-                    print(len(ret_dag.keys()))
-                    for k in ret_dag:
-                        if k == s.bug:
-                            print("found")
+                    # print("bad")
+                    ret_dag = c.keep_ancestors(chosen_key, ret_dag, removed)
+                    print("NEW SIZE: {}".format(len(ret_dag.keys())))
+                    # print(len(ret_dag.keys()))
+                    # for k in ret_dag:
+                        # if k == s.bug:
+                            # print("found")
                 else:
-                    print("good")
-                    ret_dag, removed_keys = c.remove_ancestors(chosen_key, ret_dag, removed_keys)
-                    print(len(ret_dag.keys()))
-                    for k in ret_dag:
-                        if k == s.bug:
-                            print("found")
+                    # print("good")
+                    ret_dag, removed = c.remove_ancestors(chosen_key, ret_dag, removed)
+                    print("NEW SIZE: {}".format(len(ret_dag.keys())))
+                    # print(len(ret_dag.keys()))
+                    # for k in ret_dag:
+                        # if k == s.bug:
+                            # print("found")
             for key in ret_dag:
-                if key == s.bug:
-                    print("FOUND BUG {}".format(s.bug))
+                print(s.handle_solution({'Solution': key}))
+                # if key == s.bug:
+                #     print("FOUND BUG {} AFTER {} QUESTIONS".format(s.bug, q_count))
+
+            # break
             # print(ret_dag)
             print(" ")
             # break
