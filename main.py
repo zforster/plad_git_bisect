@@ -155,6 +155,7 @@ class Client:
             queue.pop(len(queue) - 1)
             if vertex not in removed_keys.keys():
                 visited[vertex] = True
+                # print(vertex)
                 parent = starting_dag[vertex]
                 for w in parent:
                     if w not in visited and w not in removed_keys.keys():
@@ -173,11 +174,20 @@ class Client:
 
     def pick_new_key(self, dag, removed_keys, picked):
         chosen_key = None
-        if len(dag.keys()) > 9000:
-            half_number = round(len(dag.keys()) / 2)
-            key = list(dag.keys())[half_number]
+        if len(dag.keys()) > 1000:
+            ideal = round(len(dag.keys()) / 2)
+            for key in dag:
+                ancestor_count = c.bfs(key, dag, removed_keys)
+                key_value = min(ancestor_count, len(dag.keys()) - ancestor_count)
+                if round(ideal - (ideal / 3)) <= key_value <= round(ideal + (ideal / 3)):
+                    print("picking key with value {}, ideal is {}".format(key_value, ideal)) #1000 4 and 4 also works well
+                    while key in picked:
+                        key = list(dag.keys())[ideal - 1]  # what if half number is
+                    return key
+            print('COULDNT FIND SUITABLE KEY')
+            key = list(dag.keys())[ideal]
             while key in picked:
-                key = list(dag.keys())[half_number - 1]  # what if half number is
+                key = list(dag.keys())[ideal - 1]  # what if half number is
             return key
         else:
             # print("can find best key")
@@ -206,54 +216,22 @@ if __name__ == '__main__':
     content = None
     for file in os.listdir("{}/tests/".format(os.getcwd())):
         with open("{}/tests/{}".format(os.getcwd(), file), "r") as json_file:
-
             already_picked = []
-            print("OPERATING ON FILE {}".format(file))
             problem_content = json.load(json_file)
-
             s.set_problem_instance(data=problem_content)
-
             c.set_problem(s.get_problem_instance())
-
             c.generate_json_tree()
-
-            # print("WE WANT TO FIND THE BUG {}:".format(s.bug))
-            # print("DEFINED GOOD COMMIT {}:".format(c.problem['good']))
-            # print("DEFINED BAD COMMIT {}:".format(c.problem['bad']))
-            # print("STARTING SIZE: {}".format(len(c.tree.keys())))
-
+            print("OPERATING ON FILE {} WITH SIZE {}".format(file, len(c.tree.keys())))
             ret_dag, removed = c.remove_ancestors(c.problem['good'], c.tree, {})
             ret_dag = c.keep_ancestors(c.problem['bad'], ret_dag, removed)
-            print("NEW SIZE: {}".format(len(ret_dag.keys())))
-            q_count = 0
             while len(ret_dag.keys()) > 1:
                 chosen_key = c.pick_new_key(dag=ret_dag, removed_keys=removed, picked=already_picked)
                 already_picked.append(chosen_key)
-                # print(chosen_key)
-                q_count = q_count + 1
-                # print("asked question {}".format(q_count))
                 if s.response_to_question({'Question': chosen_key})['Answer'] == "bad":
-                    # print("bad")
                     ret_dag = c.keep_ancestors(chosen_key, ret_dag, removed)
-                    print("NEW SIZE: {}".format(len(ret_dag.keys())))
-                    # print(len(ret_dag.keys()))
-                    # for k in ret_dag:
-                        # if k == s.bug:
-                            # print("found")
                 else:
-                    # print("good")
                     ret_dag, removed = c.remove_ancestors(chosen_key, ret_dag, removed)
-                    print("NEW SIZE: {}".format(len(ret_dag.keys())))
-                    # print(len(ret_dag.keys()))
-                    # for k in ret_dag:
-                        # if k == s.bug:
-                            # print("found")
-            for key in ret_dag:
-                print(s.handle_solution({'Solution': key}))
-                # if key == s.bug:
-                #     print("FOUND BUG {} AFTER {} QUESTIONS".format(s.bug, q_count))
-
-            # break
-            # print(ret_dag)
-            print(" ")
+            for remainer in ret_dag:
+                print(s.handle_solution({'Solution': remainer}))
+                print(" ")
             # break
