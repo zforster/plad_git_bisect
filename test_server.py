@@ -127,17 +127,17 @@ class Client:
 
     def pick_new_key(self, dag, removed_keys, picked):
         chosen_key = None
-        if len(dag.keys()) > 1000:
+        if len(dag.keys()) > 20000:
             ideal = round(len(dag.keys()) / 2)
             for key in dag:
                 ancestor_count = c.bfs(key, dag, removed_keys)
                 key_value = min(ancestor_count, len(dag.keys()) - ancestor_count)
                 if round(ideal - (ideal / 4)) <= key_value <= round(ideal + (ideal / 4)):
-                    print("picking key with value {}, ideal is {}".format(key_value, ideal)) #1000 4 and 4 also works well
+                    # print("picking key with value {}, ideal is {}".format(key_value, ideal)) #1000 4 and 4 also works well
                     while key in picked:
                         key = list(dag.keys())[ideal - 1]  # what if half number is
                     return key
-            print('COULDNT FIND SUITABLE KEY')
+            # print('COULDNT FIND SUITABLE KEY')
             key = list(dag.keys())[ideal]
             while key in picked:
                 key = list(dag.keys())[ideal - 1]  # what if half number is
@@ -179,10 +179,10 @@ if __name__ == '__main__':
             chosen = c.pick_new_key(dag=ret_dag, removed_keys=removed, picked=already_picked)
             already_picked.append(chosen)
             if s.response_to_question(chosen) == "bad":
-                print('bad')
+                # print('bad')
                 ret_dag = c.keep_ancestors(chosen, ret_dag, removed)
             else:
-                print('good')
+                # print('good')
                 ret_dag, removed = c.remove_ancestors(chosen, ret_dag, removed)
         for last_key in ret_dag:
             solution_response = s.handle_solution(last_key)

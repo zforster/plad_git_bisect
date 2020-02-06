@@ -1,61 +1,9 @@
-# import json
-# import websocket
-#
-# if __name__ == '__main__':
-#     websocket.enableTrace(True)
-#     ws = websocket.create_connection("ws://129.12.44.229:1234")
-#     print("connected")
-#     ws.send('{"User":"zf31"}')
-#     result = ws.recv()
-#     print(result + " hello")
-#     ws.close()
-# if __name__ == '__main__':
-#     import websocket, json
-#     try:
-#         import thread
-#     except ImportError:
-#         import _thread as thread
-#     import time
-#
-#     def on_message(ws, message):
-#         print('test')
-#         print(message)
-#
-#     def on_error(ws, error):
-#         print(error)
-#
-#     def on_close(ws):
-#         print("### closed ###")
-#
-#     def on_open(ws):
-#         def run(*args):
-#             x = '{"User": "zf31"}'
-#             y = json.loads(json.dumps(x).encode('utf-8'))
-#             ws.send(y)
-#             time.sleep(1)
-#             ws.close()
-#             print("thread terminating...")
-#         thread.start_new_thread(run, ())
-#
-#     # HTTP/1.1 101 Switching Protocols
-#     # HTTP/1.1 101 Web Socket Protocol Handshake
-#     if __name__ == "__main__":
-#         websocket.enableTrace(True)
-#         ws = websocket.WebSocketApp("ws://129.12.44.229:1234",
-#                                     on_message=on_message,
-#                                     on_error=on_error,
-#                                     on_close=on_close)
-#         ws.on_open = on_open
-#         ws.run_forever()
-
 import json
 import os
-import pandas
 
 
 class Server:
     def __init__(self):
-        self.name = None
         self.good = None
         self.bad = None
         self.dag = None
@@ -179,7 +127,7 @@ class Client:
             for key in dag:
                 ancestor_count = c.bfs(key, dag, removed_keys)
                 key_value = min(ancestor_count, len(dag.keys()) - ancestor_count)
-                if round(ideal - (ideal / 3)) <= key_value <= round(ideal + (ideal / 3)):
+                if round(ideal - (ideal / 4)) <= key_value <= round(ideal + (ideal / 4)):
                     print("picking key with value {}, ideal is {}".format(key_value, ideal)) #1000 4 and 4 also works well
                     while key in picked:
                         key = list(dag.keys())[ideal - 1]  # what if half number is
@@ -214,6 +162,7 @@ if __name__ == '__main__':
     s = Server()
     c = Client()
     content = None
+    sum = 0
     for file in os.listdir("{}/tests/".format(os.getcwd())):
         with open("{}/tests/{}".format(os.getcwd(), file), "r") as json_file:
             already_picked = []
@@ -221,7 +170,7 @@ if __name__ == '__main__':
             s.set_problem_instance(data=problem_content)
             c.set_problem(s.get_problem_instance())
             c.generate_json_tree()
-            print("OPERATING ON FILE {} WITH SIZE {}".format(file, len(c.tree.keys())))
+            # print("OPERATING ON FILE {} WITH SIZE {}".format(file, len(c.tree.keys())))
             ret_dag, removed = c.remove_ancestors(c.problem['good'], c.tree, {})
             ret_dag = c.keep_ancestors(c.problem['bad'], ret_dag, removed)
             while len(ret_dag.keys()) > 1:
@@ -232,6 +181,9 @@ if __name__ == '__main__':
                 else:
                     ret_dag, removed = c.remove_ancestors(chosen_key, ret_dag, removed)
             for remainer in ret_dag:
-                print(s.handle_solution({'Solution': remainer}))
-                print(" ")
+                resp = s.handle_solution({'Solution': remainer})
+                sum = sum + resp['Score'][c.problem['name']]
+                print(resp)
+            print(sum)
+            print(" ")
             # break
