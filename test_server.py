@@ -32,7 +32,7 @@ class Server:
     def response_to_question(self, key: str):
         self.connection.send(json.dumps({'Question': key}))
         resp = json.loads(self.connection.recv())['Answer']
-        print("question asked - {}".format(resp))
+        # print("question asked - {}".format(resp))
         return resp.lower()
 
     def handle_solution(self, key: str):
@@ -168,24 +168,25 @@ if __name__ == '__main__':
     c = Client()
     s.auth()
     solution_response = None
+    count = 0
     while solution_response is None:
         already_picked = []
         c.set_problem(s.get_problem())
+        print(c.problem['name'])
         c.generate_json_tree()
-
         ret_dag, removed = c.remove_ancestors(c.problem['good'], c.tree, {})
         ret_dag = c.keep_ancestors(c.problem['bad'], ret_dag, removed)
         while len(ret_dag.keys()) > 1:
             chosen = c.pick_new_key(dag=ret_dag, removed_keys=removed, picked=already_picked)
             already_picked.append(chosen)
             if s.response_to_question(chosen) == "bad":
-                # print('bad')
                 ret_dag = c.keep_ancestors(chosen, ret_dag, removed)
             else:
-                # print('good')
                 ret_dag, removed = c.remove_ancestors(chosen, ret_dag, removed)
         for last_key in ret_dag:
             solution_response = s.handle_solution(last_key)
+            count = count + 1
+            print(count)
     print(" ")
     for i in solution_response:
         print(solution_response[i])
