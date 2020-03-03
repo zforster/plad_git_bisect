@@ -1,5 +1,7 @@
 import json
 from websocket import create_connection
+import random
+import datetime
 
 
 class Server:
@@ -45,10 +47,8 @@ class Server:
     def handle_solution(self, key: str):
         self.connection.send(json.dumps({'Solution': key}))
         resp = json.loads(self.connection.recv())
-        print("FINISHED PROBLEM {}".format(self.name))
+        # print("FINISHED PROBLEM {}".format(self.name))
         if 'Score' in resp.keys():
-            for key in resp:
-                print(resp[key])
             return resp
         elif 'Instance' in resp.keys(): # if we are asked new question on the same repo
             self.set_problem(self.repo, resp)
@@ -138,12 +138,15 @@ class Client:
 
     def pick_new_key(self, dag, removed_keys, picked):
         chosen_key = None
-        if len(dag.keys()) > 20000:
+        if len(dag.keys()) > 6000:
             ideal = round(len(dag.keys()) / 2)
-            for key in dag:
+            random_key_order = list(dag.keys())  # List of keys
+            random.shuffle(random_key_order)
+            for key in random_key_order:
                 ancestor_count = c.bfs(key, dag, removed_keys)
                 key_value = min(ancestor_count, len(dag.keys()) - ancestor_count)
-                if round(ideal - (ideal / 4)) <= key_value <= round(ideal + (ideal / 4)): # may have to move number down to 3?
+                # print("ideal {} this key {}".format(ideal, key_value))
+                if round(ideal - (ideal / 6)) <= key_value <= round(ideal + (ideal / 6)): # may have to move number down to 3?
                     # print("picking key with value {}, ideal is {}".format(key_value, ideal)) #1000 4 and 4 also works well
                     while key in picked:
                         key = list(dag.keys())[ideal - 1]  # what if half number is
@@ -157,7 +160,9 @@ class Client:
             # print("can find best key")
             best_number = round(len(dag.keys()) / 2)
             key_count = {}
-            for key in dag:
+            random_key_order = list(dag.keys())  # List of keys
+            random.shuffle(random_key_order)
+            for key in random_key_order:
                 ancestor_count = c.bfs(key, dag, removed_keys)
                 if ancestor_count == best_number:
                     # print("found best key during count")
@@ -181,12 +186,13 @@ if __name__ == '__main__':
     s.auth()
     solution_response = None
     # count = 0
+    print("STARTING AT {}".format(datetime.datetime.now()))
     while solution_response is None:
         count = 0
         already_picked = []
         c.set_problem(s.get_problem())
         print(c.problem['name'])
-        print("Good: {}, Bad: {}".format(c.problem['good'], c.problem['bad']))
+        # print("Good: {}, Bad: {}".format(c.problem['good'], c.problem['bad']))
         c.generate_json_tree()
         ret_dag, removed = c.remove_ancestors(c.problem['good'], c.tree, {})
         ret_dag = c.keep_ancestors(c.problem['bad'], ret_dag, removed)
@@ -206,5 +212,6 @@ if __name__ == '__main__':
             solution_response = s.handle_solution(last_key)
             # count = count + 1
     print(" ")
-    for i in solution_response:
-        print(solution_response[i])
+    with open("scores.txt", "w") as scores:
+        scores.write(str(solution_response))
+    print("FINISHED AT {}".format(datetime.datetime.now()))
