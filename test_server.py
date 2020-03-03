@@ -163,6 +163,7 @@ class Client:
         # print("best key is {}".format(chosen_key))
         return chosen_key
 
+
 if __name__ == '__main__':
     s = Server()
     c = Client()
