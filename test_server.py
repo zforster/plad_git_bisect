@@ -6,7 +6,7 @@ import datetime
 
 class Server:
     def __init__(self):
-        self.connection = create_connection("ws://129.12.44.229:1234")
+        self.connection = create_connection("ws://129.12.44.246:1234", timeout=999999999)
         self.repo = None
         self.dag = {}
         self.name = None
@@ -40,23 +40,31 @@ class Server:
         self.set_problem(repo, instance)
 
     def response_to_question(self, key: str):
-        self.connection.send(json.dumps({'Question': key}))
-        resp = json.loads(self.connection.recv())['Answer']
-        return resp.lower()
+        try:
+            self.connection.send(json.dumps({'Question': key}))
+            resp = json.loads(self.connection.recv())['Answer']
+            return resp.lower()
+        except:
+            print("broke")
+            return self.response_to_question(key)
 
     def handle_solution(self, key: str):
-        self.connection.send(json.dumps({'Solution': key}))
-        resp = json.loads(self.connection.recv())
-        # print("FINISHED PROBLEM {}".format(self.name))
-        if 'Score' in resp.keys():
-            return resp
-        elif 'Instance' in resp.keys(): # if we are asked new question on the same repo
-            self.set_problem(self.repo, resp)
-            return None
-        else:  # if we are given a different repo
-            instance = json.loads(self.connection.recv())
-            self.set_problem(resp, instance)
-            return None
+        try:
+            self.connection.send(json.dumps({'Solution': key}))
+            resp = json.loads(self.connection.recv())
+            # print("FINISHED PROBLEM {}".format(self.name))
+            if 'Score' in resp.keys():
+                return resp
+            elif 'Instance' in resp.keys(): # if we are asked new question on the same repo
+                self.set_problem(self.repo, resp)
+                return None
+            else:  # if we are given a different repo
+                instance = json.loads(self.connection.recv())
+                self.set_problem(resp, instance)
+                return None
+        except:
+            print("broke")
+            return self.handle_solution(key)
 
 
 class Client:
@@ -138,24 +146,37 @@ class Client:
 
     def pick_new_key(self, dag, removed_keys, picked):
         chosen_key = None
-        if len(dag.keys()) > 6000:
+        if len(dag.keys()) > 2000:
+            best_so_far = None
             ideal = round(len(dag.keys()) / 2)
             random_key_order = list(dag.keys())  # List of keys
             random.shuffle(random_key_order)
             for key in random_key_order:
                 ancestor_count = c.bfs(key, dag, removed_keys)
                 key_value = min(ancestor_count, len(dag.keys()) - ancestor_count)
+                if len(dag.keys()) > 300000:
+                    if round(ideal - (ideal / 3)) <= key_value <= round(ideal + (ideal / 3)): # working with 100 and 3 may have to move number down to 3? 267512
+                    # print("picking key with value {}, ideal is {}".format(key_value, ideal)) #1000 4 and 4 also works well
+                        while key in picked:
+                            key = list(dag.keys())[ideal - 1]  # what if half number is
+                        return key
+                else:
                 # print("ideal {} this key {}".format(ideal, key_value))
-                if round(ideal - (ideal / 6)) <= key_value <= round(ideal + (ideal / 6)): # may have to move number down to 3?
+                    if round(ideal - (ideal / 6)) <= key_value <= round(ideal + (ideal / 6)): # working with 100 and 3 may have to move number down to 3? 267512
+                        # print("picking key with value {}, ideal is {}".format(key_value, ideal)) #1000 4 and 4 also works well
+                        while key in picked:
+                            key = list(dag.keys())[ideal - 1]  # what if half number is
+                        return key
+            print('COULDNT FIND SUITABLE KEY')
+            for key in random_key_order:
+                ancestor_count = c.bfs(key, dag, removed_keys)
+                key_value = min(ancestor_count, len(dag.keys()) - ancestor_count)
+                # print("ideal {} this key {}".format(ideal, key_value))
+                if round(ideal - (ideal / 2)) <= key_value <= round(ideal + (ideal / 2)): # working with 100 and 3 may have to move number down to 3?
                     # print("picking key with value {}, ideal is {}".format(key_value, ideal)) #1000 4 and 4 also works well
                     while key in picked:
                         key = list(dag.keys())[ideal - 1]  # what if half number is
                     return key
-            # print('COULDNT FIND SUITABLE KEY')
-            key = list(dag.keys())[ideal]
-            while key in picked:
-                key = list(dag.keys())[ideal - 1]  # what if half number is
-            return key
         else:
             # print("can find best key")
             best_number = round(len(dag.keys()) / 2)
@@ -185,7 +206,8 @@ if __name__ == '__main__':
     c = Client()
     s.auth()
     solution_response = None
-    # count = 0
+    question_count = 1
+    count = 0
     print("STARTING AT {}".format(datetime.datetime.now()))
     while solution_response is None:
         count = 0
@@ -207,10 +229,11 @@ if __name__ == '__main__':
                 ret_dag, removed = c.remove_ancestors(chosen, ret_dag, removed)
         for last_key in ret_dag:
             count = count + 1
-            print("ANSWERED IN: {} QUESTIONS".format(count))
-            print(" ")
             solution_response = s.handle_solution(last_key)
-            # count = count + 1
+            print("ANSWERED IN: {} QUESTIONS".format(count))
+            print("QUESTION {}".format(question_count))
+            print(" ")
+            question_count = question_count + 1
     print(" ")
     with open("scores.txt", "w") as scores:
         scores.write(str(solution_response))
