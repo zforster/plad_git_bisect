@@ -146,22 +146,27 @@ class Client:
 
     def pick_new_key(self, dag, removed_keys, picked):
         chosen_key = None
-        if len(dag.keys()) > 2000:
-            best_so_far = None
+        if len(dag.keys()) > 100:
             ideal = round(len(dag.keys()) / 2)
             random_key_order = list(dag.keys())  # List of keys
             random.shuffle(random_key_order)
             for key in random_key_order:
                 ancestor_count = c.bfs(key, dag, removed_keys)
                 key_value = min(ancestor_count, len(dag.keys()) - ancestor_count)
-                if len(dag.keys()) > 300000:
+                if len(dag.keys()) > 60000:
                     if round(ideal - (ideal / 3)) <= key_value <= round(ideal + (ideal / 3)): # working with 100 and 3 may have to move number down to 3? 267512
-                    # print("picking key with value {}, ideal is {}".format(key_value, ideal)) #1000 4 and 4 also works well
+                        # print("picking key with value {}, ideal is {}".format(key_value, ideal)) #1000 4 and 4 also works well
+                        while key in picked:
+                            key = list(dag.keys())[ideal - 1]  # what if half number is
+                        return key
+                elif len(dag.keys()) > 15000:
+                    if round(ideal - (ideal / 4)) <= key_value <= round(ideal + (ideal / 4)): # working with 100 and 3 may have to move number down to 3? 267512
+                        # print("picking key with value {}, ideal is {}".format(key_value, ideal)) #1000 4 and 4 also works well
                         while key in picked:
                             key = list(dag.keys())[ideal - 1]  # what if half number is
                         return key
                 else:
-                # print("ideal {} this key {}".format(ideal, key_value))
+                    # print("ideal {} this key {}".format(ideal, key_value))
                     if round(ideal - (ideal / 6)) <= key_value <= round(ideal + (ideal / 6)): # working with 100 and 3 may have to move number down to 3? 267512
                         # print("picking key with value {}, ideal is {}".format(key_value, ideal)) #1000 4 and 4 also works well
                         while key in picked:
