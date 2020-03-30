@@ -1,70 +1,43 @@
 import json
-from websocket import create_connection
-import random
-import datetime
+import os
 
 
 class Server:
     def __init__(self):
-        self.connection = create_connection("ws://129.12.44.246:1234", timeout=999999999)
-        self.repo = None
-        self.dag = {}
-        self.name = None
-        self.problem = None
-        self.instance = None
+        self.good = None
+        self.bad = None
+        self.dag = None
+        self.bug = None
+        self.all_bad = None
+        self.question_count = 0
 
-    def set_problem(self, repo: dict, instance: dict):
-        self.repo = repo
-        self.problem = repo['Repo']
-        self.instance = instance['Instance']
-        self.problem['good'] = self.instance['good']
-        self.problem['bad'] = self.instance['bad']
-        self.name = self.problem['name']
-        for commit in self.problem['dag']:
-            self.dag[commit[0]] = commit[1]
+    def set_problem_instance(self, data: dict):
+        self.name = data[0]['name']
+        self.good = data[0]['good']
+        self.bad = data[0]['bad']
+        self.dag = data[0]['dag']
+        self.bug = data[1]['bug']
+        self.all_bad = data[1]['all_bad']
+        self.question_count = 0
 
-    def extract_repo_and_instance(self):
-        repo = self.connection.recv()
-        instance = self.connection.recv()
-        return json.loads(repo), json.loads(instance)
+    def get_problem_instance(self):
+        return {"Problem": {"name": "{}".format(self.name),
+                            "good": "{}".format(self.good),
+                            "bad": "{}".format(self.bad),
+                            "dag": self.dag}}
 
-    def get_problem(self):
-        return self.problem
+    def response_to_question(self, question: dict):
+        self.question_count = self.question_count + 1
+        commit = question['Question']
+        if commit in self.all_bad:
+            return {"Answer": "bad"}
+        return {"Answer": "good"}
 
-    def auth(self):
-        print("Authenticating User")
-        auth_msg = json.dumps({'User': ['zf31', '05f0834b']})
-        self.connection.send(auth_msg)
-        print("Setting Problem Instance")
-        repo, instance = self.extract_repo_and_instance()
-        self.set_problem(repo, instance)
-
-    def response_to_question(self, key: str):
-        try:
-            self.connection.send(json.dumps({'Question': key}))
-            resp = json.loads(self.connection.recv())['Answer']
-            return resp.lower()
-        except:
-            print("broke")
-            return self.response_to_question(key)
-
-    def handle_solution(self, key: str):
-        try:
-            self.connection.send(json.dumps({'Solution': key}))
-            resp = json.loads(self.connection.recv())
-            # print("FINISHED PROBLEM {}".format(self.name))
-            if 'Score' in resp.keys():
-                return resp
-            elif 'Instance' in resp.keys(): # if we are asked new question on the same repo
-                self.set_problem(self.repo, resp)
-                return None
-            else:  # if we are given a different repo
-                instance = json.loads(self.connection.recv())
-                self.set_problem(resp, instance)
-                return None
-        except:
-            print("broke")
-            return self.handle_solution(key)
+    def handle_solution(self, solution: dict):
+        answer = solution['Solution']
+        if answer == self.bug:
+            return {"Score": {self.name: self.question_count}}
+        return {"Score": {self.name: "null"}}
 
 
 class Client:
@@ -73,11 +46,14 @@ class Client:
         self.tree = {}
         self.bad_ancestors = {}
         self.good_ancestors = {}
+        self.test = {}
+        self.ancestors = {}
 
     def set_problem(self, problem: dict):
-        self.problem = problem
+        self.problem = problem['Problem']
         self.bad_ancestors = {}
         self.good_ancestors = {}
+        self.test = {}
 
     def generate_json_tree(self):
         self.tree = {}
@@ -146,49 +122,26 @@ class Client:
 
     def pick_new_key(self, dag, removed_keys, picked):
         chosen_key = None
-        if len(dag.keys()) > 100:
+        if len(dag.keys()) > 1000:
             ideal = round(len(dag.keys()) / 2)
-            random_key_order = list(dag.keys())  # List of keys
-            random.shuffle(random_key_order)
-            for key in random_key_order:
+            for key in dag:
                 ancestor_count = c.bfs(key, dag, removed_keys)
                 key_value = min(ancestor_count, len(dag.keys()) - ancestor_count)
-                if len(dag.keys()) > 60000:
-                    if round(ideal - (ideal / 3)) <= key_value <= round(ideal + (ideal / 3)): # working with 100 and 3 may have to move number down to 3? 267512
-                        # print("picking key with value {}, ideal is {}".format(key_value, ideal)) #1000 4 and 4 also works well
-                        while key in picked:
-                            key = list(dag.keys())[ideal - 1]  # what if half number is
-                        return key
-                elif len(dag.keys()) > 15000:
-                    if round(ideal - (ideal / 4)) <= key_value <= round(ideal + (ideal / 4)): # working with 100 and 3 may have to move number down to 3? 267512
-                        # print("picking key with value {}, ideal is {}".format(key_value, ideal)) #1000 4 and 4 also works well
-                        while key in picked:
-                            key = list(dag.keys())[ideal - 1]  # what if half number is
-                        return key
-                else:
-                    # print("ideal {} this key {}".format(ideal, key_value))
-                    if round(ideal - (ideal / 6)) <= key_value <= round(ideal + (ideal / 6)): # working with 100 and 3 may have to move number down to 3? 267512
-                        # print("picking key with value {}, ideal is {}".format(key_value, ideal)) #1000 4 and 4 also works well
-                        while key in picked:
-                            key = list(dag.keys())[ideal - 1]  # what if half number is
-                        return key
-            print('COULDNT FIND SUITABLE KEY')
-            for key in random_key_order:
-                ancestor_count = c.bfs(key, dag, removed_keys)
-                key_value = min(ancestor_count, len(dag.keys()) - ancestor_count)
-                # print("ideal {} this key {}".format(ideal, key_value))
-                if round(ideal - (ideal / 2)) <= key_value <= round(ideal + (ideal / 2)): # working with 100 and 3 may have to move number down to 3?
-                    # print("picking key with value {}, ideal is {}".format(key_value, ideal)) #1000 4 and 4 also works well
+                if round(ideal - (ideal / 4)) <= key_value <= round(ideal + (ideal / 4)):
+                    print("picking key with value {}, ideal is {}".format(key_value, ideal)) #1000 4 and 4 also works well
                     while key in picked:
                         key = list(dag.keys())[ideal - 1]  # what if half number is
                     return key
+            print('COULDNT FIND SUITABLE KEY')
+            key = list(dag.keys())[ideal]
+            while key in picked:
+                key = list(dag.keys())[ideal - 1]  # what if half number is
+            return key
         else:
             # print("can find best key")
             best_number = round(len(dag.keys()) / 2)
             key_count = {}
-            random_key_order = list(dag.keys())  # List of keys
-            random.shuffle(random_key_order)
-            for key in random_key_order:
+            for key in dag:
                 ancestor_count = c.bfs(key, dag, removed_keys)
                 if ancestor_count == best_number:
                     # print("found best key during count")
@@ -205,41 +158,32 @@ class Client:
         # print("best key is {}".format(chosen_key))
         return chosen_key
 
-
 if __name__ == '__main__':
     s = Server()
     c = Client()
-    s.auth()
-    solution_response = None
-    question_count = 1
-    count = 0
-    print("STARTING AT {}".format(datetime.datetime.now()))
-    while solution_response is None:
-        count = 0
-        already_picked = []
-        c.set_problem(s.get_problem())
-        print(c.problem['name'])
-        # print("Good: {}, Bad: {}".format(c.problem['good'], c.problem['bad']))
-        c.generate_json_tree()
-        ret_dag, removed = c.remove_ancestors(c.problem['good'], c.tree, {})
-        ret_dag = c.keep_ancestors(c.problem['bad'], ret_dag, removed)
-        while len(ret_dag.keys()) > 1:
-            print("problem size: {}".format(len(ret_dag.keys())))
-            chosen = c.pick_new_key(dag=ret_dag, removed_keys=removed, picked=already_picked)
-            already_picked.append(chosen)
-            count = count + 1
-            if s.response_to_question(chosen) == "bad":
-                ret_dag = c.keep_ancestors(chosen, ret_dag, removed)
-            else:
-                ret_dag, removed = c.remove_ancestors(chosen, ret_dag, removed)
-        for last_key in ret_dag:
-            count = count + 1
-            solution_response = s.handle_solution(last_key)
-            print("ANSWERED IN: {} QUESTIONS".format(count))
-            print("QUESTION {}".format(question_count))
+    content = None
+    sum = 0
+    for file in os.listdir("{}/tests/".format(os.getcwd())):
+        with open("{}/tests/{}".format(os.getcwd(), file), "r") as json_file:
+            already_picked = []
+            problem_content = json.load(json_file)
+            s.set_problem_instance(data=problem_content)
+            c.set_problem(s.get_problem_instance())
+            c.generate_json_tree()
+            # print("OPERATING ON FILE {} WITH SIZE {}".format(file, len(c.tree.keys())))
+            ret_dag, removed = c.remove_ancestors(c.problem['good'], c.tree, {})
+            ret_dag = c.keep_ancestors(c.problem['bad'], ret_dag, removed)
+            while len(ret_dag.keys()) > 1:
+                chosen_key = c.pick_new_key(dag=ret_dag, removed_keys=removed, picked=already_picked)
+                already_picked.append(chosen_key)
+                if s.response_to_question({'Question': chosen_key})['Answer'] == "bad":
+                    ret_dag = c.keep_ancestors(chosen_key, ret_dag, removed)
+                else:
+                    ret_dag, removed = c.remove_ancestors(chosen_key, ret_dag, removed)
+            for remainer in ret_dag:
+                resp = s.handle_solution({'Solution': remainer})
+                sum = sum + resp['Score'][c.problem['name']]
+                print(resp)
+            print(sum)
             print(" ")
-            question_count = question_count + 1
-    print(" ")
-    with open("scores.txt", "w") as scores:
-        scores.write(str(solution_response))
-    print("FINISHED AT {}".format(datetime.datetime.now()))
+            # break
